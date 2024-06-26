@@ -1,5 +1,5 @@
-use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use crate::color::Color;
 
@@ -16,7 +16,7 @@ impl Add for Vec3 {
 impl Sub for Vec3 {
     type Output = Vec3;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec3(self.0-rhs.0, self.1 - rhs.1, self.2)
+        Vec3(self.0 - rhs.0, self.1 - rhs.1, self.2)
     }
 }
 // implement multiplication and division too
@@ -67,7 +67,7 @@ impl fmt::Display for Vec3 {
 }
 
 impl Vec3 {
-    pub fn new(x: f32,y: f32, z: f32) -> Vec3 {
+    pub fn new(x: f32, y: f32, z: f32) -> Vec3 {
         Vec3(x, y, z)
     }
     pub fn x(&self) -> f32 {
@@ -115,21 +115,57 @@ impl Vec3 {
 
 pub struct Ray {
     origin: Point,
-    direction: Vec3
+    direction: Vec3,
 }
 
 impl Ray {
     pub fn new(origin: Point, direction: Vec3) -> Ray {
-        Ray{origin, direction}
+        Ray { origin, direction }
     }
     pub fn at(&self, t: f32) -> Point {
         self.origin.clone() + t * self.direction.clone()
     }
-    // WHY DOES THIS WORK???
     pub fn direction(&self) -> Vec3 {
         self.direction
     }
     pub fn origin(&self) -> Point {
         self.origin
+    }
+}
+
+pub struct HitRecord {
+    pub p: Point,
+    pub normal: Vec3,
+    pub t: f32,
+}
+pub trait Hittable {
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
+}
+
+pub struct Sphere {
+    pub center: Point,
+    pub radius: f32
+}
+
+impl Hittable for Sphere {
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+        let oc = self.center - r.origin();
+        let a = r.direction().norm_squared();
+        let h = r.direction().dot(&oc);
+        let c = oc.norm_squared() - self.radius * self.radius;
+        let delta = h * h - a * c;
+        let t = if delta < 0. {
+            return None
+        } else {
+            (h - delta.sqrt()) / a
+        };
+
+        let hit_at = r.at(t);
+        let normal = hit_at-self.center;
+        let normal = normal.normalized();
+
+        let hit_record = HitRecord {p: hit_at, normal, t};
+
+        Some(hit_record)
     }
 }
