@@ -16,7 +16,7 @@ impl Add for Vec3 {
 impl Sub for Vec3 {
     type Output = Vec3;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec3(self.0 - rhs.0, self.1 - rhs.1, self.2)
+        Vec3(self.0 - rhs.0, self.1 - rhs.1, self.2 - rhs.2)
     }
 }
 // implement multiplication and division too
@@ -89,6 +89,9 @@ impl Vec3 {
     pub fn div(&self, other: &Vec3) -> Vec3 {
         Vec3(self.0 / other.0, self.1 / other.1, self.2 / other.2)
     }
+    pub fn abs(&self) -> Vec3 {
+        Vec3(self.0.abs(), self.1.abs(), self.2.abs())
+    }
     pub fn norm_squared(&self) -> f32 {
         self.0 * self.0 + self.1 * self.1 + self.2 * self.2
     }
@@ -109,6 +112,7 @@ impl Vec3 {
         self / self.norm()
     }
     pub fn to_color(self) -> Color {
+        assert!(self.0 <= 1. && self.1 <= 1. && self.2 <= 1.);
         Color(self.0, self.1, self.2)
     }
 }
@@ -123,7 +127,7 @@ impl Ray {
         Ray { origin, direction }
     }
     pub fn at(&self, t: f32) -> Point {
-        self.origin.clone() + t * self.direction.clone()
+        self.origin + t * self.direction
     }
     pub fn direction(&self) -> Vec3 {
         self.direction
@@ -131,20 +135,30 @@ impl Ray {
     pub fn origin(&self) -> Point {
         self.origin
     }
+    pub fn reflection(&self, normal: Vec3, origin: Point) -> Ray {
+        let normal_component = normal.dot(&self.direction());
+        Ray {
+            origin,
+            direction: self.direction - 2. * normal_component * normal
+        }
+    }
 }
 
 pub struct HitRecord {
     pub p: Point,
     pub normal: Vec3,
     pub t: f32,
+    pub hit_object: Sphere,
 }
 pub trait Hittable {
     fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 
+#[derive(Clone, Copy)]
 pub struct Sphere {
     pub center: Point,
-    pub radius: f32
+    pub radius: f32,
+    pub color: Color,
 }
 
 impl Hittable for Sphere {
@@ -155,16 +169,24 @@ impl Hittable for Sphere {
         let c = oc.norm_squared() - self.radius * self.radius;
         let delta = h * h - a * c;
         let t = if delta < 0. {
-            return None
+            return None;
         } else {
             (h - delta.sqrt()) / a
         };
+        if t < t_min || t > t_max {
+            return None;
+        }
 
         let hit_at = r.at(t);
-        let normal = hit_at-self.center;
-        let normal = normal.normalized();
+        let normal = hit_at - self.center;
+        let normal = normal/self.radius;
 
-        let hit_record = HitRecord {p: hit_at, normal, t};
+        let hit_record = HitRecord {
+            p: hit_at,
+            normal,
+            t,
+            hit_object: *self,
+        };
 
         Some(hit_record)
     }
