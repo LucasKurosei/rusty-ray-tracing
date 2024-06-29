@@ -120,11 +120,16 @@ impl Vec3 {
 pub struct Ray {
     origin: Point,
     direction: Vec3,
+    pub color: Color,
 }
 
 impl Ray {
-    pub fn new(origin: Point, direction: Vec3) -> Ray {
-        Ray { origin, direction }
+    pub fn new(origin: Point, direction: Vec3, color: Color) -> Ray {
+        Ray {
+            origin,
+            direction,
+            color,
+        }
     }
     pub fn at(&self, t: f32) -> Point {
         self.origin + t * self.direction
@@ -135,15 +140,26 @@ impl Ray {
     pub fn origin(&self) -> Point {
         self.origin
     }
-    pub fn reflection(&self, normal: Vec3, origin: Point) -> Ray {
+    pub fn reflection(&self, normal: Vec3, origin: Point, color: Color) -> Ray {
         let normal_component = normal.dot(&self.direction());
         Ray {
             origin,
-            direction: self.direction - 2. * normal_component * normal
+            direction: self.direction - 2. * normal_component * normal,
+            color,
         }
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct RayTracingTexture {
+    pub color: Color,
+}
+#[derive(Clone, Copy)]
+pub struct Sphere {
+    pub center: Point,
+    pub radius: f32,
+    pub color: Color,
+}
 pub struct HitRecord {
     pub p: Point,
     pub normal: Vec3,
@@ -153,14 +169,6 @@ pub struct HitRecord {
 pub trait Hittable {
     fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
-
-#[derive(Clone, Copy)]
-pub struct Sphere {
-    pub center: Point,
-    pub radius: f32,
-    pub color: Color,
-}
-
 impl Hittable for Sphere {
     fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let oc = self.center - r.origin();
@@ -179,7 +187,7 @@ impl Hittable for Sphere {
 
         let hit_at = r.at(t);
         let normal = hit_at - self.center;
-        let normal = normal/self.radius;
+        let normal = normal / self.radius;
 
         let hit_record = HitRecord {
             p: hit_at,

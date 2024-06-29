@@ -1,3 +1,4 @@
+use crate::math_obj::Vec3;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy)]
@@ -6,6 +7,9 @@ pub struct Color(pub f32, pub f32, pub f32);
 impl Color {
     pub fn mul(&self, other: &Color) -> Color {
         Color(self.0 * other.0, self.1 * other.1, self.2 * other.2)
+    }
+    pub fn to_vec3(self) -> Vec3 {
+        Vec3::new(self.0, self.1, self.2)
     }
 }
 impl fmt::Display for Color {
