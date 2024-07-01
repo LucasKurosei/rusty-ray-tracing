@@ -175,6 +175,7 @@ pub trait Hittable {
     fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 impl Hittable for Sphere {
+    // TODO: account for rays that originate inside the Sphere
     fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let oc = self.center - r.origin();
         let a = r.direction().norm_squared();
