@@ -1,9 +1,11 @@
 use crate::color::Color;
 use crate::math_obj::{Point, Ray, Sphere, Vec3};
-use math_obj::{HitRecord, Hittable};
+use math_obj::{HitRecord, Hittable, RayTracingTexture};
+use rand::Rng;
 
 use std::f32::consts::PI;
 use std::io::{self, Write};
+use std::vec;
 
 pub mod color;
 pub mod math_obj;
@@ -24,42 +26,40 @@ fn main() {
     let camera_origin = Point::new(0., 0., 0.);
     let pixel00_loc =
         Point::new(-VIEWPORT_WIDTH * 0.5, VIEWPORT_HEIGHT * 0.5, 0.) + focal_point + camera_origin;
-    let centers = vec![Vec3::new(0., 1., 3.), Vec3::new(1., 0., 2.)];
+
+    // default scene configuration
+    let centers = vec![Vec3::new(0., 1., 3.), Vec3::new(1., 0., 2.), Vec3::new(0., -500.5, 0.), Vec3::new(0.25, -0.25, 1.25), Vec3::new(-1.125, -0.625, 1.75)];
+    let radiuses = vec!(0.5, 0.5, 500., 0.25, 0.125);
+    let colors = vec!(Color(0.5, 0., 1.), Color(1., 1., 1.), Color(0.7, 0.7, 0.7), Color(1., 1., 1.), Color(0.95, 0.6, 0.6));
+    let mut matt_texture = RayTracingTexture{color: Color(1., 1., 1.), scatter_ray: matt_texture_scatter_ray};
     let mut hittables = Vec::new();
-    for i in 0..2 {
+    for i in 0..5 {
+        matt_texture.color = colors[i];
         hittables.push(Sphere {
             center: centers[i],
-            radius: 0.5,
-            color: centers[i].abs().normalized().to_color(),
+            radius: radiuses[i],
+            texture: matt_texture
         });
     }
-    let floor = Sphere {
-        center: Vec3::new(0., -500.5, 0.),
-        radius: 500.,
-        color: Color(0.7, 0.7, 0.7),
-    };
-    hittables.push(floor);
+    hittables[1].texture.scatter_ray = metal_texture_scatter_ray;
     println!("P3");
     println!("{IMAGE_WIDTH} {IMAGE_HEIGHT}");
     println!("256");
-    let rand_directions = fibonacci_sphere(SAMPLE_PER_PIXEL as usize);
     for i in 0..IMAGE_HEIGHT {
         for j in 0..IMAGE_WIDTH {
             let pixel_center = pixel00_loc + i as f32 * vp_v + j as f32 * vp_u;
             // TODO: correct for centering the pixel
             let mut color_vec = Vec3::new(0., 0., 0.);
-            for i in 0..SAMPLE_PER_PIXEL_SQRT {
-                for j in 0..SAMPLE_PER_PIXEL_SQRT {
+            for k in 0..SAMPLE_PER_PIXEL_SQRT {
+                for l in 0..SAMPLE_PER_PIXEL_SQRT {
                     // TODO: fix the bug that happens when r = (0, 0, 0)
                     let direction = pixel_center
-                        + vp_u * (i as f32) / SAMPLE_PER_PIXEL_SQRT as f32
-                        + vp_v * (j as f32) / SAMPLE_PER_PIXEL_SQRT as f32;
+                        + vp_u * (k as f32) / SAMPLE_PER_PIXEL_SQRT as f32
+                        + vp_v * (l as f32) / SAMPLE_PER_PIXEL_SQRT as f32;
                     let unit_vec = direction.normalized();
-                    let a = 0.5 * (unit_vec.y() + 1.0);
-                    let col = (1. - a) * Vec3::new(1., 1., 1.) + a * Vec3::new(0.4, 0.6, 1.);
-                    let col = col.to_color();
-                    let r = Ray::new(camera_origin, direction, col);
-                    color_vec = color_vec + ray_color(r, &hittables, 3, &rand_directions).to_vec3();
+                    let col = Color(1., 1., 1.);
+                    let r = Ray::new(camera_origin, direction, col, SAMPLE_PER_PIXEL);
+                    color_vec = color_vec + ray_color(r, &hittables, 3).to_vec3();
                 }
             }
             let pixel_color = (color_vec / SAMPLE_PER_PIXEL as f32).to_color();
@@ -89,6 +89,7 @@ fn fibonacci_sphere(samples: usize) -> Vec<Vec3> {
 
     points
 }
+
 fn fetch_hittable(r: &Ray, hittables: &[Sphere]) -> Option<HitRecord> {
     let mut maybe_hit_record: Option<HitRecord> = None;
     for hittable in hittables {
@@ -109,30 +110,48 @@ fn fetch_hittable(r: &Ray, hittables: &[Sphere]) -> Option<HitRecord> {
     maybe_hit_record
 }
 
-fn ray_color(r: Ray, hittables: &[Sphere], max_rebounds: i32, rand_directions: &[Vec3]) -> Color {
-    let mut col = r.color;
+fn matt_texture_scatter_ray(r: &Ray, at: &Point, normal: &Vec3) -> Vec<Ray> {
+    let mut rng_thread = rand::thread_rng();
+    let mut reflected_rays = Vec::with_capacity(r.scatter_potential.try_into().unwrap());
+    for _ in 0..r.scatter_potential {
+        let rand_direction = Vec3::new(rng_thread.gen_range(-1.0..1.0), rng_thread.gen_range(-1.0..1.0), rng_thread.gen_range(-1.0..1.0));
+        let reflected_ray =
+        Ray::new(*at, *normal + rand_direction, r.color, 1);
+        reflected_rays.push(reflected_ray);
+    }
+    reflected_rays
+}
+
+fn metal_texture_scatter_ray(r: &Ray, at: &Point, normal: &Vec3) -> Vec<Ray> {
+    if r.scatter_potential<1 {
+        return Vec::new()
+    }
+    vec![r.reflection(*normal, *at, r.color)]
+}
+
+fn ray_color(mut r: Ray, hittables: &[Sphere], max_rebounds: i32) -> Color {
     match fetch_hittable(&r, hittables) {
         None => {
-            return col;
+            return r.color;
         }
         Some(hit_record) => {
-            col = col.mul(&hit_record.hit_object.color);
-            if max_rebounds > 0 {
-                let mut col_vec = Vec3::new(0., 0., 0.);
-                for i in 0..SAMPLE_PER_PIXEL {
-                    let rand_direction = rand_directions[i as usize];
-                    let reflected_ray =
-                        Ray::new(hit_record.p, hit_record.normal + rand_direction, col);
-                    col_vec = col_vec
-                        + ray_color(reflected_ray, hittables, max_rebounds - 1, rand_directions)
-                            .to_vec3();
+            r.color = r.color.mul(&hit_record.hit_object.texture.color);
+            let mut col_vec = Vec3::new(0., 0., 0.);
+            let scattered_rays = (hit_record.hit_object.texture.scatter_ray)(&r, &hit_record.p, &hit_record.normal);
+            let scatter_num = scattered_rays.len() as f32;
+            if scatter_num > 0. {
+            for mut ray in scattered_rays {
+                if max_rebounds <= 0 {
+                    ray.scatter_potential = 0;
                 }
-                col_vec = col_vec / SAMPLE_PER_PIXEL as f32;
-                col_vec = col_vec * 0.9;
-                col = col.mul(&col_vec.to_color());
+                col_vec = col_vec + ray_color(ray, hittables, max_rebounds - 1).to_vec3();
+            }
+            col_vec = col_vec / scatter_num;
+            col_vec = col_vec * 0.9;
+            r.color = r.color.mul(&col_vec.to_color());
             }
         }
     }
-    assert!(col.0 <= 1. && col.1 <= 1. && col.2 <= 1.);
-    col
+    assert!(r.color.0 <= 1. && r.color.1 <= 1. && r.color.2 <= 1.);
+    r.color
 }

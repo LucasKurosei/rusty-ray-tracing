@@ -121,14 +121,17 @@ pub struct Ray {
     origin: Point,
     direction: Vec3,
     pub color: Color,
+    // defines maximum number of scatters
+    pub scatter_potential: i32
 }
 
 impl Ray {
-    pub fn new(origin: Point, direction: Vec3, color: Color) -> Ray {
+    pub fn new(origin: Point, direction: Vec3, color: Color, scatter_potential: i32) -> Ray {
         Ray {
             origin,
             direction,
             color,
+            scatter_potential
         }
     }
     pub fn at(&self, t: f32) -> Point {
@@ -146,6 +149,7 @@ impl Ray {
             origin,
             direction: self.direction - 2. * normal_component * normal,
             color,
+            scatter_potential: self.scatter_potential
         }
     }
 }
@@ -153,12 +157,13 @@ impl Ray {
 #[derive(Clone, Copy)]
 pub struct RayTracingTexture {
     pub color: Color,
+    pub scatter_ray: fn(&Ray, &Point, &Vec3) -> Vec<Ray>
 }
 #[derive(Clone, Copy)]
 pub struct Sphere {
     pub center: Point,
     pub radius: f32,
-    pub color: Color,
+    pub texture: RayTracingTexture
 }
 pub struct HitRecord {
     pub p: Point,
